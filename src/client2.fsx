@@ -144,6 +144,21 @@ let getSubscribedTweets() =
             printfn "%s tweeted : %s"  senderName tweetmsg
             printfn"~~~~~~~~~~~~"
 
+let getHashtagTweets() = 
+    printfn "\n Enter hashtag you want to search"
+    let mutable hashtag = Console.ReadLine()
+    let url = "http://localhost:5000/api/hashtag-tweets/" + hashtag
+    let HashtagTweetJson = FSharp.Data.JsonValue.Load url
+    let HashtagTweetArray = HashtagTweetJson.AsArray()
+    if HashtagTweetArray.Length = 0 then
+        printfn "No tweets for this hashtag"
+    else
+        for tweet in HashtagTweetArray do
+            let tweetmsg = tweet.["text"].ToString()
+            let senderName  = tweet.["sender"].ToString()
+            printfn "%s tweeted : %s"  senderName tweetmsg
+            printfn"~~~~~~~~~~~~"
+
 
 
 
@@ -179,7 +194,7 @@ let rec menu () =
 
 let printMainMenu () =
     printfn "\n\n[ MAIN SCREEN ]"
-    printfn "1. Tweet\t 2. Subscribe\t 3. Get Subscribed Tweets\t 4. Get My Mentions\t 9. Exit"
+    printfn "1. Tweet\t 2. Subscribe\t 3. Get Subscribed Tweets\t 4. Get My Mentions\t 5. Get Hashtag Tweets\t 9. Exit"
 
 
     printf "Enter your choise: "
@@ -200,6 +215,9 @@ let rec mainMenu () =
         mainMenu()
     | true, 4 ->
         getMentionedTweets()
+        mainMenu()
+    | true, 5 ->
+        getHashtagTweets()
         mainMenu()
     | true, 9 ->
         ()

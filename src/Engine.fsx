@@ -130,6 +130,10 @@ module Model =
         | [<EndPoint "GET /subscribed-tweets">]
             GetSubscribedTweets of uname: string
 
+        | [<EndPoint "GET /hashtag-tweets">]
+            GetHashtagTweets of hashtag: string
+        
+
         /// Accepts GET requests to /people
         | [<EndPoint "GET /user">]
             GetUser
@@ -365,6 +369,25 @@ module Backend =
                     tweetList <- Array.append tweetList [|tweet|]
         tweetList |> Ok 
 
+    //GET HASHTAG TWEETS
+    let GetHashtagTweets(hashtag:string): ApiResult<TweetFetch[]> =
+        let temp = "\""+hashtag+"\"" 
+        let mutable tweetIdList = [||]
+        let mutable tweetList = [||]
+        let selectSql = "select tweetId from HashtagInfo where hashtag =  " + temp
+        let selectCommand = new SQLiteCommand(selectSql, connection)
+        let reader = selectCommand.ExecuteReader()
+        while reader.Read() do
+            tweetIdList <- Array.append tweetIdList  [|(reader.["tweetId"].ToString())|]
+        if not(tweetIdList.Length = 0) then
+                printfn "TweetIDLIST = %A" tweetIdList 
+                for tweetId in tweetIdList do   
+                    let mutable (tweetMsg,senderName) = GetTweet(tweetId)
+                    let tweet = { text = tweetMsg
+                                  sender = senderName  }
+                    tweetList <- Array.append tweetList [|tweet|]
+        tweetList |> Ok 
+
     let GetUser () : ApiResult<UserData[]> =
         lock user <| fun () ->
             user
@@ -441,6 +464,8 @@ module Site =
             JsonContent (Backend.GetMentionTweets uname)
         | GetSubscribedTweets uname ->
             JsonContent (Backend.GetSubscribedTweets uname)
+        | GetHashtagTweets hashtag ->
+            JsonContent (Backend.GetHashtagTweets hashtag)
         | GetUser ->
             JsonContent (Backend.GetUser ())
         | GetPeople ->
