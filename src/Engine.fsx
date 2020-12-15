@@ -10,9 +10,10 @@ open WebSharper.UI.Html
 open WebSharper.UI.Templating
 open System.Data.SQLite 
 
-
+//Map with User Name as key, Id as value
 let mutable userIdNameMap = Map.empty
 
+//Initialize Database
 let db_init() =
 
     // if (System.IO.File.Exists("sample.sqlite")) then
@@ -23,32 +24,33 @@ let db_init() =
     let connection = new SQLiteConnection(connectionString)
     connection.Open()
 
+    //Table for Registrations
     let structureSql =
         "create table if not exists RegistrationInfo (" +
         "userId int," +
         "uname varchar(30)," +
         "password varchar(30)) " 
-
     let structureCommand = new SQLiteCommand(structureSql, connection)
     structureCommand.ExecuteNonQuery() |>ignore
 
+    //Table for Tweets
     let structureSql =
             "create table if not exists TweetsInfo (" +
             "tweetId varchar(50)," +
             "msg varchar(50)," +
             "userId int)" 
-
     let structureCommand = new SQLiteCommand(structureSql, connection)
     structureCommand.ExecuteNonQuery() |>ignore
 
+    //Table for Hashtags
     let structureSql =
             "create table if not exists HashtagInfo (" +
             "tweetId varchar(50)," +
             "hashtag varchar(50))" 
-
     let structureCommand = new SQLiteCommand(structureSql, connection)
     structureCommand.ExecuteNonQuery() |>ignore
 
+    //Table for Mentions
     let structureSql =
             "create table if not exists MentionsInfo (" +
             "tweetId varchar(50)," +
@@ -57,6 +59,7 @@ let db_init() =
     let structureCommand = new SQLiteCommand(structureSql, connection)
     structureCommand.ExecuteNonQuery() |>ignore
 
+    //Table for Subscribers
     let structureSql =
             "create table if not exists SubscribeInfo (" +
             "userId int," + 
@@ -64,23 +67,14 @@ let db_init() =
     let structureCommand = new SQLiteCommand(structureSql, connection)
     structureCommand.ExecuteNonQuery() |>ignore
 
-    printfn "created Database"
 
 
 
 /// The types used by this application.
 module Model =
 
-    type PersonData =
-        {
-            id: int
-            firstName: string
-            lastName: string
-            born: System.DateTime
-            /// Since this is an option, this field is only present in JSON for Some value.
-            died: option<System.DateTime>
-        }
-    /// Data about a person. Used both for storage and JSON parsing/writing.
+
+    /// Data about User
     type UserData =
         {
             id: int
@@ -88,19 +82,21 @@ module Model =
             pwd: string
         }
 
-
+    //Tweet information
     type TweetData =
         {
             text: string
             userid: int
         }
 
+    //Subscribe information
     type SubscribeData =
         {
             uname: string
             subscribeTo: string
         }
 
+    //Returned Tweet Results
     type TweetFetch = 
         {
             text: string
@@ -111,7 +107,6 @@ module Model =
     /// This defines the set of requests accepted by our API.
     type ApiEndPoint =
 
-        /// Accepts POST requests to /people with PersonData as JSON body
         | [<EndPoint "POST /register-user"; Json "userData">]
             CreateUser of userData: UserData
 
@@ -134,35 +129,12 @@ module Model =
             GetHashtagTweets of hashtag: string
         
 
-        /// Accepts GET requests to /people
-        | [<EndPoint "GET /user">]
-            GetUser
 
-        /// Accepts GET requests to /people
-        | [<EndPoint "GET /people">]
-            GetPeople
-
-        /// Accepts GET requests to /people/{id}
-        | [<EndPoint "GET /people">]
-            GetPerson of id: int
-
-        /// Accepts POST requests to /people with PersonData as JSON body
-        | [<EndPoint "POST /people"; Json "personData">]
-            CreatePerson of personData: PersonData
-
-        /// Accepts PUT requests to /people with PersonData as JSON body
-        | [<EndPoint "PUT /people"; Json "personData">]
-            EditPerson of personData: PersonData
-
-        /// Accepts DELETE requests to /people/{id}
-        | [<EndPoint "DELETE /people">]
-            DeletePerson of id: int
+ 
 
     /// The type of all endpoints for the application.
     type EndPoint =
-        
-        /// Accepts requests to /
-        | [<EndPoint "/">] Home
+
 
         /// Accepts requests to /api/...
         | [<EndPoint "/api">] Api of Cors<ApiEndPoint>
@@ -175,27 +147,19 @@ module Model =
     /// The Error case contains an HTTP status and a JSON error to return.
     type ApiResult<'T> = Result<'T, Http.Status * Error>
 
-    /// Result value for CreatePerson.
+    /// Default result value
     type Id = { id : int }
 
 open Model
 
 /// This module implements the back-end of the application.
-/// It's a CRUD application maintaining a basic in-memory database of people.
 module Backend =
 
     let databaseFilename = "sample.sqlite"
     let connectionString = sprintf "Data Source=%s;Version=3;" databaseFilename
     let connection = new SQLiteConnection(connectionString)
     connection.Open()
-    /// The people database.
-    /// This is a dummy implementation, of course; a real-world application
-    /// would go to an actual database.
-    let private people = new Dictionary<int, PersonData>()
 
-    let private user = new Dictionary<int, UserData>()
-   
-    /// The highest id used so far, incremented each time a person is POSTed.
     let private lastId = ref 0
 
     let personNotFound() : ApiResult<'T> =
@@ -205,6 +169,7 @@ module Backend =
         let userid = userIdNameMap.[uname]
         userid
 
+    //Function to parse tweets and extract hashtags and mentions
     let parseTweet (tweet:string) =
             let mutable hashtags = []
             let mutable mentions = []
@@ -222,7 +187,6 @@ module Backend =
             let insertSql = 
                     "insert into RegistrationInfo( userId, uname, password) " + 
                     "values (@userId, @uname, @password)"
-
             use command = new SQLiteCommand(insertSql, connection)
             command.Parameters.AddWithValue("@userId", !lastId) |> ignore
             command.Parameters.AddWithValue("@uname", data.uname) |> ignore
@@ -241,12 +205,10 @@ module Backend =
         let mutable isExistsLogin = false
         while reader.Read() do
             isExistsLogin <- true
-
         if isExistsLogin then   
            Ok { text = "True"  
                 userid = userIdNameMap.[uname] }
-        else
-           
+        else   
            Ok { text = "False" 
                 userid = 0 }
 
@@ -285,7 +247,6 @@ module Backend =
             WriteHashtag(tweetId,hashtag)
         for userMention in mentionedArray do
             WriteMention(tweetId,userMention,data.userid)
-
         Ok { id = !lastId}
     
     //SUBSCRIBE TO USER
@@ -309,7 +270,6 @@ module Backend =
         let selectSql  = "select msg, userId from TweetsInfo where tweetID = " + temp
         let selectCommand = new SQLiteCommand(selectSql, connection)
         let reader = selectCommand.ExecuteReader()
-        
         while reader.Read() do
             tweetMsg <- reader.["msg"].ToString()
             let userid = reader.["userId"].ToString()
@@ -331,7 +291,6 @@ module Backend =
         let reader = selectCommand.ExecuteReader()
         while reader.Read() do
                         tweetIdList <- Array.append tweetIdList  [|(reader.["tweetId"].ToString())|]
-        
         for tweetId in tweetIdList do   
             let mutable (tweetMsg,senderName) = GetTweet(tweetId)
             let tweet = { text = tweetMsg
@@ -388,51 +347,11 @@ module Backend =
                     tweetList <- Array.append tweetList [|tweet|]
         tweetList |> Ok 
 
-    let GetUser () : ApiResult<UserData[]> =
-        lock user <| fun () ->
-            user
-            |> Seq.map (fun (KeyValue(_, u)) -> u)
-            |> Array.ofSeq
-            |> Ok
 
-    let GetPeople () : ApiResult<PersonData[]> =
-        lock people <| fun () ->
-            people
-            |> Seq.map (fun (KeyValue(_, person)) -> person)
-            |> Array.ofSeq
-            |> Ok
-
-    let GetPerson (id: int) : ApiResult<PersonData> =
-        lock people <| fun () ->
-            match people.TryGetValue(id) with
-            | true, person -> Ok person
-            | false, _ -> personNotFound()
-
-    let CreatePerson (data: PersonData) : ApiResult<Id> =
-        lock people <| fun () ->
-            incr lastId
-            people.[!lastId] <- { data with id = !lastId }
-            Ok { id = !lastId }
-
-    let EditPerson (data: PersonData) : ApiResult<Id> =
-        lock people <| fun () ->
-            match people.TryGetValue(data.id) with
-            | true, _ ->
-                people.[data.id] <- data
-                Ok { id = data.id }
-            | false, _ -> personNotFound()
-
-    let DeletePerson (id: int) : ApiResult<Id> =
-        lock people <| fun () ->
-            match people.TryGetValue(id) with
-            | true, _ ->
-                people.Remove(id) |> ignore
-                Ok { id = id }
-            | false, _ -> personNotFound()
 
     
 
-/// The server side website, tying everything together.
+/// The server side , tying everything together.
 module Site =
     open WebSharper.UI
     open WebSharper.UI.Html
@@ -466,36 +385,10 @@ module Site =
             JsonContent (Backend.GetSubscribedTweets uname)
         | GetHashtagTweets hashtag ->
             JsonContent (Backend.GetHashtagTweets hashtag)
-        | GetUser ->
-            JsonContent (Backend.GetUser ())
-        | GetPeople ->
-            JsonContent (Backend.GetPeople ())
-        | GetPerson id ->
-            JsonContent (Backend.GetPerson id)
-        | CreatePerson personData ->
-            JsonContent (Backend.CreatePerson personData)
-        | EditPerson personData ->
-            JsonContent (Backend.EditPerson personData)
-        | DeletePerson id ->
-            JsonContent (Backend.DeletePerson id)
 
 
 
-    /// A simple HTML home page.
-    let HomePage (ctx: Context<EndPoint>) : Async<Content<EndPoint>> =
-        // Type-safely creates the URI: "/api/people/1"
-        let person1Link = ctx.Link (Api (Cors.Of (GetPerson 1)))
-        Content.Page(
-            Body = [
-                p [] [text "API is running."]
-                p [] [
-                    text "Try querying: "
-                    a [attr.href person1Link] [text person1Link]
-                ]
-            ]
-        )
 
-    type IndexTemplate = Template<"login.html", clientLoad = ClientLoad.FromDocument>
 
     /// The Sitelet parses requests into EndPoint values
     /// and dispatches them to the content function.
@@ -504,7 +397,6 @@ module Site =
         db_init()
         Application.MultiPage (fun ctx endpoint ->
             match endpoint with
-            | Home -> HomePage ctx
             
             | Api api ->
                 Content.Cors api (fun allows ->
