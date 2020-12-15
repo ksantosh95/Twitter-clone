@@ -17,7 +17,7 @@ open FSharp.Data
 open FSharp.Data.HttpRequestHeaders
 open FSharp.Data.JsonExtensions
 
-
+let mutable tweetMap = Map.empty
 
 //REGISTER USER
 type Json = JsonProvider<"""{
@@ -61,14 +61,15 @@ let loginUser() =
     userid <- a.["userid"].ToString()
     if c = "\"True\"" then
         printfn "Login successful"
+        true
     else
         printfn "User not found"
+        false
 
 let newTweet() =
     printfn "\n Enter Tweet"
     let mutable tweet = Console.ReadLine()
     let sendTweet twt =
-
         let json = sprintf """{  "text" : "%s" , "userid": %s }"""  tweet userid
         let response = Http.Request(
                                     "http://localhost:5000/api/new-tweet",
@@ -119,47 +120,83 @@ let subscribe() =
     
 
 let getMentionedTweets() =
+    let mutable count = 0
     let url = "http://localhost:5000/api/mention/" + uname
     let mentionedTweetJson = FSharp.Data.JsonValue.Load url
     let mentionedTweetArray = mentionedTweetJson.AsArray()
     if mentionedTweetArray.Length = 0 then
         printfn "No mentioned Tweets"
     else
+        tweetMap <- Map.empty
         for tweet in mentionedTweetArray do
+            count <- count + 1
             let tweetmsg = tweet.["text"].ToString()
             let senderName  = tweet.["sender"].ToString()
-            printfn "%s tweeted : %s"  senderName tweetmsg
+            printfn "[%d] %s tweeted : %s" count senderName tweetmsg
             printfn"~~~~~~~~~~~~"
+            tweetMap <- Map.add count tweetmsg tweetMap
 
 let getSubscribedTweets() = 
+    let mutable count = 0
     let url = "http://localhost:5000/api/subscribed-tweets/" + uname
     let SubscribedTweetJson = FSharp.Data.JsonValue.Load url
     let SubscribedTweetArray = SubscribedTweetJson.AsArray()
     if SubscribedTweetArray.Length = 0 then
         printfn "No tweets from Subscribed Accounts"
     else
+        tweetMap <- Map.empty
         for tweet in SubscribedTweetArray do
+            count <- count + 1
             let tweetmsg = tweet.["text"].ToString()
             let senderName  = tweet.["sender"].ToString()
-            printfn "%s tweeted : %s"  senderName tweetmsg
+            printfn "[%d] %s tweeted : %s" count senderName tweetmsg
             printfn"~~~~~~~~~~~~"
+            tweetMap <- Map.add count tweetmsg tweetMap
 
 let getHashtagTweets() = 
     printfn "\n Enter hashtag you want to search"
     let mutable hashtag = Console.ReadLine()
+    let mutable count = 0
     let url = "http://localhost:5000/api/hashtag-tweets/" + hashtag
     let HashtagTweetJson = FSharp.Data.JsonValue.Load url
     let HashtagTweetArray = HashtagTweetJson.AsArray()
     if HashtagTweetArray.Length = 0 then
         printfn "No tweets for this hashtag"
     else
+        tweetMap <- Map.empty
         for tweet in HashtagTweetArray do
+            count <- count + 1
             let tweetmsg = tweet.["text"].ToString()
             let senderName  = tweet.["sender"].ToString()
-            printfn "%s tweeted : %s"  senderName tweetmsg
+            printfn "[%d] %s tweeted : %s"  count senderName tweetmsg
             printfn"~~~~~~~~~~~~"
+            tweetMap <- Map.add count tweetmsg tweetMap
+            
 
 
+let reTweet() = 
+    printfn "\n Enter the number of the tweet you want to retweet"
+    let mutable tweetCount = Int32.Parse (Console.ReadLine())
+    let tweetMsg = tweetMap.[tweetCount]
+
+    let sendTweet twt =
+
+        let json = sprintf """{  "text" : %s , "userid": %s }"""  tweetMsg userid
+        let response = Http.Request(
+                                    "http://localhost:5000/api/new-tweet",
+                                    httpMethod = "POST",
+                                    headers = [ ContentType HttpContentTypes.Json ],
+                                    body = TextRequest json
+            )
+        let r1 = response.Body
+        let response1 =
+            match r1 with
+            | Text a -> a
+            | Binary b -> System.Text.ASCIIEncoding.ASCII.GetString b
+      
+        response1
+    let NewTweet = sendTweet "test1"
+    printf ""
 
 
 
@@ -189,12 +226,14 @@ let rec menu () =
         registerUser()
         menu()
     | true, 2 -> 
-        loginUser()
+        let validLogin = loginUser()
+        if not validLogin then
+            menu()
     | _ -> menu()
 
 let printMainMenu () =
     printfn "\n\n[ MAIN SCREEN ]"
-    printfn "1. Tweet\t 2. Subscribe\t 3. Get Subscribed Tweets\t 4. Get My Mentions\t 5. Get Hashtag Tweets\t 9. Exit"
+    printfn "1. Tweet\t 2. Subscribe\t 3. Get Subscribed Tweets\t 4. Get My Mentions\t 5. Get Hashtag Tweets\t 6. ReTweet\t 9. Exit"
 
 
     printf "Enter your choise: "
@@ -218,6 +257,9 @@ let rec mainMenu () =
         mainMenu()
     | true, 5 ->
         getHashtagTweets()
+        mainMenu()
+    | true, 6 ->
+        reTweet()
         mainMenu()
     | true, 9 ->
         ()
