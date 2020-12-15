@@ -31,11 +31,8 @@ type Json = JsonProvider<"""{
 printfn "Enter username to register"
 let mutable uname = Console.ReadLine()
 let sendCmd cmd =
-    let json = """{
-        "id": 0,
-        "uname": " """ + uname + """ ",
-        "pwd": "password1"
-    }"""
+
+    let json = sprintf """{"id": 0, "uname": "%s" , "pwd" : "password1" }""" uname
     let response = Http.Request(
                                 "http://localhost:5000/api/register-user",
                                 httpMethod = "POST",
@@ -47,43 +44,49 @@ let sendCmd cmd =
         match r1 with
         | Text a -> a
         | Binary b -> System.Text.ASCIIEncoding.ASCII.GetString b
-    //printfn "%A" response
-    //let response1 = string response.Body
-    //let text = BitConverter.ToString response.Body
-    //printfn "%s" text
+  
     response1
 
 let response = sendCmd "test1"
-//printfn "%s" response
 
-
-// at runtime, load up new sample matching that schema
-//let response = Http.Request("http://localhost:5000/api/people/2")
-//let samples = Json.Parse(response.Body.ToString())
 
 printfn "Registered as %s" uname
 
-// let url = "http://localhost:5000/api/user"
-// let a = FSharp.Data.JsonValue.Load url
-
-// let ar = a.AsArray()
-// for i in ar do
-//     printfn "%A" i
-//     printfn"~~~~~~~~~~~~"
 
 
 printfn "\n Enter login info"
 let mutable loginUserName = Console.ReadLine()
 let url = "http://localhost:5000/api/login/" + loginUserName
 let a = FSharp.Data.JsonValue.Load url
-printfn "%A" a.["text"]
 let c = a.["text"].ToString()
-printfn "%s" c
+let userid = a.["userid"].ToString()
 if c = "\"True\"" then
     printfn "Login successful"
+else
+    printfn "User not found"
 // for i in ar do
 //     printfn "%A" i
 //     printfn"~~~~~~~~~~~~"
 
+printfn "\n Enter Tweet"
+let mutable tweet = Console.ReadLine()
+let sendTweet twt =
+
+    let json = sprintf """{  "text" : "%s" , "userid": %s }"""  tweet userid
+    let response = Http.Request(
+                                "http://localhost:5000/api/new-tweet",
+                                httpMethod = "POST",
+                                headers = [ ContentType HttpContentTypes.Json ],
+                                body = TextRequest json
+        )
+    let r1 = response.Body
+    let response1 =
+        match r1 with
+        | Text a -> a
+        | Binary b -> System.Text.ASCIIEncoding.ASCII.GetString b
+  
+    response1
+
+let NewTweet = sendTweet "test1"
 
 System.Console.ReadLine() |> ignore

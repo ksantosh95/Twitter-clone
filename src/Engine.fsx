@@ -11,7 +11,13 @@ open WebSharper.UI.Templating
 open System.Data.SQLite 
 
 
+let mutable userIdNameMap = Map.empty
+
 let db_init() =
+
+    if (System.IO.File.Exists("sample.sqlite")) then
+            System.IO.File.Delete("sample.sqlite")
+            
     let databaseFilename = "sample.sqlite"
     let connectionString = sprintf "Data Source=%s;Version=3;" databaseFilename
     let connection = new SQLiteConnection(connectionString)
@@ -25,6 +31,32 @@ let db_init() =
 
     let structureCommand = new SQLiteCommand(structureSql, connection)
     structureCommand.ExecuteNonQuery() |>ignore
+
+    let structureSql =
+            "create table if not exists TweetsInfo (" +
+            "tweetId varchar(50)," +
+            "msg varchar(50)," +
+            "userId int)" 
+
+    let structureCommand = new SQLiteCommand(structureSql, connection)
+    structureCommand.ExecuteNonQuery() |>ignore
+
+    let structureSql =
+            "create table if not exists HashtagInfo (" +
+            "tweetId varchar(50)," +
+            "hashtag varchar(50))" 
+
+    let structureCommand = new SQLiteCommand(structureSql, connection)
+    structureCommand.ExecuteNonQuery() |>ignore
+
+    let structureSql =
+            "create table if not exists MentionsInfo (" +
+            "tweetId varchar(50)," +
+            "uname varchar(50)," +
+            "senderUserId int)" 
+    let structureCommand = new SQLiteCommand(structureSql, connection)
+    structureCommand.ExecuteNonQuery() |>ignore
+
     printfn "created Database"
 
 
@@ -32,7 +64,6 @@ let db_init() =
 /// The types used by this application.
 module Model =
 
-    /// Data about a person. Used both for storage and JSON parsing/writing.
     type PersonData =
         {
             id: int
@@ -42,7 +73,6 @@ module Model =
             /// Since this is an option, this field is only present in JSON for Some value.
             died: option<System.DateTime>
         }
-
     /// Data about a person. Used both for storage and JSON parsing/writing.
     type UserData =
         {
@@ -52,9 +82,10 @@ module Model =
         }
 
 
-    type ResponseData =
+    type TweetData =
         {
             text: string
+            userid: int
         }
 
     /// The type of REST API endpoints.
@@ -67,6 +98,9 @@ module Model =
 
         | [<EndPoint "GET /login">]
             GetLogin of uname: string
+
+        | [<EndPoint "POST /new-tweet"; Json "tweetData">]
+            NewTweet of tweetData: TweetData
 
         /// Accepts GET requests to /people
         | [<EndPoint "GET /user">]
@@ -134,6 +168,18 @@ module Backend =
     let personNotFound() : ApiResult<'T> =
         Error (Http.Status.NotFound, { error = "Person not found." })
 
+    let parseTweet (tweet:string) =
+            let mutable hashtags = []
+            let mutable mentions = []
+            let words = tweet.Split ' '
+            for word in words do
+                if word.StartsWith("#") then
+                    hashtags <- hashtags @ [word.[1..]]
+                if word.StartsWith("@") then
+                    mentions <- mentions @ [word.[1..]]
+            ( List.toArray(hashtags),mentions |> List.toArray)
+
+    //USER REGISTRATION
     let CreateUser (data: UserData) : ApiResult<Id> = 
             incr lastId
             let insertSql = 
@@ -145,11 +191,14 @@ module Backend =
             command.Parameters.AddWithValue("@uname", data.uname) |> ignore
             command.Parameters.AddWithValue("@password", data.pwd) |> ignore
             command.ExecuteNonQuery() |> ignore
+            let temp = data.uname.ToString()
+            userIdNameMap <- Map.add temp !lastId userIdNameMap
             Ok { id = !lastId }
             
-            
-    let GetLogin (uname: string) : ApiResult<ResponseData> =
-        let selectSql = """select  uname from RegistrationInfo where uname = " """ + uname + """ " """
+    //USER LOGIN   
+    let GetLogin (uname: string) : ApiResult<TweetData> =
+        let temp = "\""+uname+"\"" 
+        let selectSql = """select  uname from RegistrationInfo where uname = """ + temp
         let selectCommand = new SQLiteCommand(selectSql, connection)
         let reader = selectCommand.ExecuteReader()
         let mutable isExistsLogin = false
@@ -157,9 +206,50 @@ module Backend =
             isExistsLogin <- true
 
         if isExistsLogin then   
-           Ok { text = "True" }
+           Ok { text = "True"  
+                userid = userIdNameMap.[uname] }
         else
-           Ok { text = "False" }
+           
+           Ok { text = "False" 
+                userid = 0 }
+
+    let WriteHashtag (tweetId: string, hashtag: string) =
+        let insertSql = 
+                        "insert into HashtagInfo( tweetId, hashtag) " + 
+                        "values (@tweetId, @hashtag)"
+        use command = new SQLiteCommand(insertSql, connection)
+        command.Parameters.AddWithValue("@tweetId", tweetId) |> ignore
+        command.Parameters.AddWithValue("@hashtag", hashtag) |> ignore
+        command.ExecuteNonQuery() |> ignore
+
+    let WriteMention (tweetId: string, uname: string, senderUserId : int) =
+        let insertSql = 
+                        "insert into MentionsInfo( tweetId, uname, senderUserId) " + 
+                        "values (@tweetId, @uname, @senderUserId)"
+        use command = new SQLiteCommand(insertSql, connection)
+        command.Parameters.AddWithValue("@tweetId", tweetId) |> ignore
+        command.Parameters.AddWithValue("@uname", uname) |> ignore
+        command.Parameters.AddWithValue("@senderUserId", senderUserId) |> ignore
+        command.ExecuteNonQuery() |> ignore
+
+    //NEW TWEET FROM THE USER
+    let NewTweet (data: TweetData) : ApiResult<Id> = 
+        let mutable tweetId = Guid.NewGuid().ToString()
+        let insertSql = 
+                    "insert into TweetsInfo( tweetId, msg, userId) " + 
+                    "values (@tweetId, @msg, @userId)"
+        use command = new SQLiteCommand(insertSql, connection)
+        command.Parameters.AddWithValue("@tweetId", tweetId) |> ignore
+        command.Parameters.AddWithValue("@msg", data.text) |> ignore
+        command.Parameters.AddWithValue("@userId", data.userid) |> ignore
+        command.ExecuteNonQuery() |> ignore
+        let  (hashtagArray, mentionedArray) = parseTweet(data.text)
+        for hashtag in hashtagArray do
+            WriteHashtag(tweetId,hashtag)
+        for userMention in mentionedArray do
+            WriteMention(tweetId,userMention,data.userid)
+
+        Ok { id = !lastId}
 
     let GetUser () : ApiResult<UserData[]> =
         lock user <| fun () ->
@@ -203,29 +293,7 @@ module Backend =
                 Ok { id = id }
             | false, _ -> personNotFound()
 
-    // On application startup, pre-fill the database with a few people.
-    do List.iter (CreatePerson >> ignore) [
-        { id = 0
-          firstName = "Alonzo"
-          lastName = "Church"
-          born = DateTime(1903, 6, 14)
-          died = Some(DateTime(1995, 8, 11)) }
-        { id = 0
-          firstName = "Alan"
-          lastName = "Turing"
-          born = DateTime(1912, 6, 23)
-          died = Some(DateTime(1954, 6, 7)) }
-        { id = 0
-          firstName = "Bertrand"
-          lastName = "Russell"
-          born = DateTime(1872, 5, 18)
-          died = Some(DateTime(1970, 2, 2)) }
-        { id = 0
-          firstName = "Noam"
-          lastName = "Chomsky"
-          born = DateTime(1928, 12, 7)
-          died = None }
-    ]
+    
 
 /// The server side website, tying everything together.
 module Site =
@@ -251,6 +319,8 @@ module Site =
             JsonContent (Backend.CreateUser userData)
         | GetLogin uname -> 
             JsonContent (Backend.GetLogin uname)
+        | NewTweet tweetData ->
+            JsonContent (Backend.NewTweet tweetData)
         | GetUser ->
             JsonContent (Backend.GetUser ())
         | GetPeople ->
