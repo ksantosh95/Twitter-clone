@@ -70,3 +70,20 @@ printfn "Registered as %s" uname
 // for i in ar do
 //     printfn "%A" i
 //     printfn"~~~~~~~~~~~~"
+
+
+printfn "\n Enter login info"
+let mutable loginUserName = Console.ReadLine()
+let url = "http://localhost:5000/api/login/" + loginUserName
+let a = FSharp.Data.JsonValue.Load url
+printfn "%A" a.["text"]
+let c = a.["text"].ToString()
+printfn "%s" c
+if c = "\"True\"" then
+    printfn "Login successful"
+// for i in ar do
+//     printfn "%A" i
+//     printfn"~~~~~~~~~~~~"
+
+
+System.Console.ReadLine() |> ignore

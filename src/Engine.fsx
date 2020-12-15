@@ -51,6 +51,12 @@ module Model =
             pwd: string
         }
 
+
+    type ResponseData =
+        {
+            text: string
+        }
+
     /// The type of REST API endpoints.
     /// This defines the set of requests accepted by our API.
     type ApiEndPoint =
@@ -59,6 +65,8 @@ module Model =
         | [<EndPoint "POST /register-user"; Json "userData">]
             CreateUser of userData: UserData
 
+        | [<EndPoint "GET /login">]
+            GetLogin of uname: string
 
         /// Accepts GET requests to /people
         | [<EndPoint "GET /user">]
@@ -140,7 +148,19 @@ module Backend =
             Ok { id = !lastId }
             
             
-    
+    let GetLogin (uname: string) : ApiResult<ResponseData> =
+        let selectSql = """select  uname from RegistrationInfo where uname = " """ + uname + """ " """
+        let selectCommand = new SQLiteCommand(selectSql, connection)
+        let reader = selectCommand.ExecuteReader()
+        let mutable isExistsLogin = false
+        while reader.Read() do
+            isExistsLogin <- true
+
+        if isExistsLogin then   
+           Ok { text = "True" }
+        else
+           Ok { text = "False" }
+
     let GetUser () : ApiResult<UserData[]> =
         lock user <| fun () ->
             user
@@ -229,6 +249,8 @@ module Site =
         match ep with
         | CreateUser userData ->
             JsonContent (Backend.CreateUser userData)
+        | GetLogin uname -> 
+            JsonContent (Backend.GetLogin uname)
         | GetUser ->
             JsonContent (Backend.GetUser ())
         | GetPeople ->
