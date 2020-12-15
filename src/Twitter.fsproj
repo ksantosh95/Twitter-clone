@@ -6,8 +6,11 @@
     <WebProjectOutputDir>$(MSBuildThisFileDirectory)/wwwroot</WebProjectOutputDir>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Engine.fs" />
+    <Compile Include="Engine.fsx" />
     <Compile Include="Startup.fs" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Data.SQLite.Core" Version="1.0.113.6" />
+    </ItemGroup>
   <Import Project="..\.paket\Paket.Restore.targets" />
 </Project>

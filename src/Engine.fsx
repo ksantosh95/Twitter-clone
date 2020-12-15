@@ -1,5 +1,6 @@
 module TwitterApi.Engine
 
+
 open System
 open System.Collections.Generic
 open WebSharper
@@ -7,6 +8,26 @@ open WebSharper.Sitelets
 open WebSharper.UI
 open WebSharper.UI.Html
 open WebSharper.UI.Templating
+open System.Data.SQLite 
+
+
+let db_init() =
+    let databaseFilename = "sample.sqlite"
+    let connectionString = sprintf "Data Source=%s;Version=3;" databaseFilename
+    let connection = new SQLiteConnection(connectionString)
+    connection.Open()
+
+    let structureSql =
+        "create table if not exists RegistrationInfo (" +
+        "userId int," +
+        "uname varchar(30)," +
+        "password varchar(30)) " 
+
+    let structureCommand = new SQLiteCommand(structureSql, connection)
+    structureCommand.ExecuteNonQuery() |>ignore
+    printfn "created Database"
+
+
 
 /// The types used by this application.
 module Model =
@@ -89,6 +110,10 @@ open Model
 /// It's a CRUD application maintaining a basic in-memory database of people.
 module Backend =
 
+    let databaseFilename = "sample.sqlite"
+    let connectionString = sprintf "Data Source=%s;Version=3;" databaseFilename
+    let connection = new SQLiteConnection(connectionString)
+    connection.Open()
     /// The people database.
     /// This is a dummy implementation, of course; a real-world application
     /// would go to an actual database.
@@ -101,12 +126,20 @@ module Backend =
     let personNotFound() : ApiResult<'T> =
         Error (Http.Status.NotFound, { error = "Person not found." })
 
-    let CreateUser (data: UserData) : ApiResult<Id> =
-        printfn "reached CREATE USER" 
-        lock user <| fun () ->
+    let CreateUser (data: UserData) : ApiResult<Id> = 
             incr lastId
-            user.[!lastId] <- { data with id = !lastId }
+            let insertSql = 
+                    "insert into RegistrationInfo( userId, uname, password) " + 
+                    "values (@userId, @uname, @password)"
+
+            use command = new SQLiteCommand(insertSql, connection)
+            command.Parameters.AddWithValue("@userId", lastId) |> ignore
+            command.Parameters.AddWithValue("@uname", data.uname) |> ignore
+            command.Parameters.AddWithValue("@password", data.pwd) |> ignore
+            command.ExecuteNonQuery() |> ignore
             Ok { id = !lastId }
+            
+            
     
     let GetUser () : ApiResult<UserData[]> =
         lock user <| fun () ->
@@ -230,6 +263,8 @@ module Site =
     /// The Sitelet parses requests into EndPoint values
     /// and dispatches them to the content function.
     let Main corsAllowedOrigins : Sitelet<EndPoint> =
+
+        db_init()
         Application.MultiPage (fun ctx endpoint ->
             match endpoint with
             | Home -> HomePage ctx

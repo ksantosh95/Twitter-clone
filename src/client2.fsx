@@ -27,10 +27,13 @@ type Json = JsonProvider<"""{
     "pwd": "CVBBH"
 }""">
 //type RegisterMsg = {code : int; uid : string; password : string}
+
+printfn "Enter username to register"
+let mutable uname = Console.ReadLine()
 let sendCmd cmd =
     let json = """{
         "id": 0,
-        "uname": "user1",
+        "uname": " """ + uname + """ ",
         "pwd": "password1"
     }"""
     let response = Http.Request(
@@ -51,17 +54,19 @@ let sendCmd cmd =
     response1
 
 let response = sendCmd "test1"
-printfn "%s" response
+//printfn "%s" response
 
 
 // at runtime, load up new sample matching that schema
 //let response = Http.Request("http://localhost:5000/api/people/2")
 //let samples = Json.Parse(response.Body.ToString())
 
-let url = "http://localhost:5000/api/user"
-let a = FSharp.Data.JsonValue.Load url
+printfn "Registered as %s" uname
 
-let ar = a.AsArray()
-for i in ar do
-    printfn "%A" i
-    printfn"~~~~~~~~~~~~"
+// let url = "http://localhost:5000/api/user"
+// let a = FSharp.Data.JsonValue.Load url
+
+// let ar = a.AsArray()
+// for i in ar do
+//     printfn "%A" i
+//     printfn"~~~~~~~~~~~~"
