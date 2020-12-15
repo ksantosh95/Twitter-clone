@@ -101,6 +101,12 @@ module Model =
             subscribeTo: string
         }
 
+    type TweetFetch = 
+        {
+            text: string
+            sender: string 
+        }
+
     /// The type of REST API endpoints.
     /// This defines the set of requests accepted by our API.
     type ApiEndPoint =
@@ -117,6 +123,9 @@ module Model =
 
         | [<EndPoint "POST /subscribe"; Json "subscribeData">]
             SubscribeUser of subscribeData: SubscribeData
+
+        | [<EndPoint "GET /mention">]
+            GetMentionTweets of uname: string
 
         /// Accepts GET requests to /people
         | [<EndPoint "GET /user">]
@@ -178,6 +187,7 @@ module Backend =
     let private people = new Dictionary<int, PersonData>()
 
     let private user = new Dictionary<int, UserData>()
+   
     /// The highest id used so far, incremented each time a person is POSTed.
     let private lastId = ref 0
 
@@ -271,6 +281,7 @@ module Backend =
 
         Ok { id = !lastId}
     
+    //SUBSCRIBE TO USER
     let SubscribeUser (data: SubscribeData) : ApiResult<Id> = 
         let userid = getUserId(data.uname)
         let subscribeTo = getUserId(data.subscribeTo)
@@ -282,6 +293,44 @@ module Backend =
         command.Parameters.AddWithValue("@subscribeTo", subscribeTo) |> ignore
         command.ExecuteNonQuery() |> ignore
         Ok { id = !lastId}  
+
+    //Get tweet for a Tweet ID
+    let GetTweet (tweetId:string) =
+        let temp = "\""+tweetId+"\"" 
+        let mutable tweetMsg = ""
+        let mutable senderName = ""
+        let selectSql  = "select msg, userId from TweetsInfo where tweetID = " + temp
+        let selectCommand = new SQLiteCommand(selectSql, connection)
+        let reader = selectCommand.ExecuteReader()
+        
+        while reader.Read() do
+            tweetMsg <- reader.["msg"].ToString()
+            let userid = reader.["userId"].ToString()
+            let selectSql1  = "select uname from RegistrationInfo where userId = " + userid
+            let selectCommand1 = new SQLiteCommand(selectSql1, connection)
+            let reader1 = selectCommand1.ExecuteReader()
+            while reader1.Read() do
+                senderName <- reader1.["uname"].ToString()
+        (tweetMsg,senderName)
+
+
+    //Get my mentioned Tweets
+    let GetMentionTweets (uname: string) : ApiResult<TweetFetch[]> =
+        let temp = "\""+uname+"\"" 
+        let mutable tweetIdList = [||]
+        let mutable tweetList = [||]
+        let selectSql = "select tweetId from MentionsInfo where uname = " + temp
+        let selectCommand = new SQLiteCommand(selectSql, connection)
+        let reader = selectCommand.ExecuteReader()
+        while reader.Read() do
+                        tweetIdList <- Array.append tweetIdList  [|(reader.["tweetId"].ToString())|]
+        printfn "TweetIDLIST = %A" tweetIdList
+        for tweetId in tweetIdList do   
+            let mutable (tweetMsg,senderName) = GetTweet(tweetId)
+            let tweet = { text = tweetMsg
+                          sender = senderName  }
+            tweetList <- Array.append tweetList [|tweet|]
+        tweetList |> Ok
 
     let GetUser () : ApiResult<UserData[]> =
         lock user <| fun () ->
@@ -355,6 +404,9 @@ module Site =
             JsonContent (Backend.NewTweet tweetData)
         | SubscribeUser subscribeData ->
             JsonContent (Backend.SubscribeUser subscribeData)
+        | GetMentionTweets uname ->
+            JsonContent (Backend.GetMentionTweets uname)
+        
         | GetUser ->
             JsonContent (Backend.GetUser ())
         | GetPeople ->

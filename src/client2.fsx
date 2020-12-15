@@ -90,28 +90,64 @@ let newTweet() =
 let subscribe() =  
     printfn "\n Enter User you want to subscribe to"
     let mutable subscribeTo = Console.ReadLine()
-    let subscribe sub =
 
-        let json = sprintf """{  "uname" : "%s" , "subscribeTo": "%s" }"""  uname subscribeTo
-        let response = Http.Request(
-                                    "http://localhost:5000/api/subscribe",
-                                    httpMethod = "POST",
-                                    headers = [ ContentType HttpContentTypes.Json ],
-                                    body = TextRequest json
-            )
-        let r1 = response.Body
-        let response1 =
-            match r1 with
-            | Text a -> a
-            | Binary b -> System.Text.ASCIIEncoding.ASCII.GetString b
-      
-        response1
+    let url = "http://localhost:5000/api/login/" + subscribeTo
+    let a = FSharp.Data.JsonValue.Load url
+    let c = a.["text"].ToString()
+    if c = "\"True\"" then
+        let subscribe sub =
 
-    let NewSubscription = subscribe "test1"
-    printf ""
+            let json = sprintf """{  "uname" : "%s" , "subscribeTo": "%s" }"""  uname subscribeTo
+            let response = Http.Request(
+                                        "http://localhost:5000/api/subscribe",
+                                        httpMethod = "POST",
+                                        headers = [ ContentType HttpContentTypes.Json ],
+                                        body = TextRequest json
+                )
+            let r1 = response.Body
+            let response1 =
+                match r1 with
+                | Text a -> a
+                | Binary b -> System.Text.ASCIIEncoding.ASCII.GetString b
+          
+            response1
+
+        let NewSubscription = subscribe "test1"
+        printf ""
+    else
+        printfn "User to subscribe not found"
+    
+
+let getMentionedTweets() =
+    let url = "http://localhost:5000/api/mention/" + uname
+    let mentionedTweetJson = FSharp.Data.JsonValue.Load url
+    let mentionedTweetArray = mentionedTweetJson.AsArray()
+    for tweet in mentionedTweetArray do
+        let tweetmsg = tweet.["text"].ToString()
+        let senderName  = tweet.["sender"].ToString()
+        printfn "%s tweeted : %s"  senderName tweetmsg
+        printfn"~~~~~~~~~~~~"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 let printLoginMenu () =
-    printfn "[ LOGIN SCREEN ]"
+    printfn "\n[ LOGIN SCREEN ]"
     printfn "1. Register"
     printfn "2. Login"
     printf "Enter your choise: "
@@ -129,9 +165,10 @@ let rec menu () =
     | _ -> menu()
 
 let printMainMenu () =
-    printfn "\n\n\n[ MAIN SCREEN ]"
-    printfn "1. Tweet"
-    printfn "2. Subscribe"
+    printfn "\n\n[ MAIN SCREEN ]"
+    printfn "1. Tweet\t 2. Subscribe\t 3. Get My Mentions\t 9. Exit"
+
+
     printf "Enter your choise: "
 
 let getNewInput () = Int32.TryParse (Console.ReadLine())
@@ -145,6 +182,11 @@ let rec mainMenu () =
     | true, 2 -> 
         subscribe()
         mainMenu()
+    | true, 3 ->
+        getMentionedTweets()
+        mainMenu()
+    | true, 9 ->
+        ()
     | _ -> mainMenu()
 
 menu()
