@@ -15,9 +15,9 @@ let mutable userIdNameMap = Map.empty
 
 let db_init() =
 
-    if (System.IO.File.Exists("sample.sqlite")) then
-            System.IO.File.Delete("sample.sqlite")
-            
+    // if (System.IO.File.Exists("sample.sqlite")) then
+    //         System.IO.File.Delete("sample.sqlite")
+
     let databaseFilename = "sample.sqlite"
     let connectionString = sprintf "Data Source=%s;Version=3;" databaseFilename
     let connection = new SQLiteConnection(connectionString)
@@ -57,6 +57,13 @@ let db_init() =
     let structureCommand = new SQLiteCommand(structureSql, connection)
     structureCommand.ExecuteNonQuery() |>ignore
 
+    let structureSql =
+            "create table if not exists SubscribeInfo (" +
+            "userId int," + 
+            "subscribeTo int)" 
+    let structureCommand = new SQLiteCommand(structureSql, connection)
+    structureCommand.ExecuteNonQuery() |>ignore
+
     printfn "created Database"
 
 
@@ -88,6 +95,12 @@ module Model =
             userid: int
         }
 
+    type SubscribeData =
+        {
+            uname: string
+            subscribeTo: string
+        }
+
     /// The type of REST API endpoints.
     /// This defines the set of requests accepted by our API.
     type ApiEndPoint =
@@ -101,6 +114,9 @@ module Model =
 
         | [<EndPoint "POST /new-tweet"; Json "tweetData">]
             NewTweet of tweetData: TweetData
+
+        | [<EndPoint "POST /subscribe"; Json "subscribeData">]
+            SubscribeUser of subscribeData: SubscribeData
 
         /// Accepts GET requests to /people
         | [<EndPoint "GET /user">]
@@ -168,6 +184,10 @@ module Backend =
     let personNotFound() : ApiResult<'T> =
         Error (Http.Status.NotFound, { error = "Person not found." })
 
+    let getUserId(uname:string) = 
+        let userid = userIdNameMap.[uname]
+        userid
+
     let parseTweet (tweet:string) =
             let mutable hashtags = []
             let mutable mentions = []
@@ -187,7 +207,7 @@ module Backend =
                     "values (@userId, @uname, @password)"
 
             use command = new SQLiteCommand(insertSql, connection)
-            command.Parameters.AddWithValue("@userId", lastId) |> ignore
+            command.Parameters.AddWithValue("@userId", !lastId) |> ignore
             command.Parameters.AddWithValue("@uname", data.uname) |> ignore
             command.Parameters.AddWithValue("@password", data.pwd) |> ignore
             command.ExecuteNonQuery() |> ignore
@@ -250,6 +270,18 @@ module Backend =
             WriteMention(tweetId,userMention,data.userid)
 
         Ok { id = !lastId}
+    
+    let SubscribeUser (data: SubscribeData) : ApiResult<Id> = 
+        let userid = getUserId(data.uname)
+        let subscribeTo = getUserId(data.subscribeTo)
+        let insertSql = 
+                        "insert into SubscribeInfo(userId, subscribeTo) " + 
+                        "values (@userId, @subscribeTo)"
+        use command = new SQLiteCommand(insertSql, connection)
+        command.Parameters.AddWithValue("@userId", userid) |> ignore
+        command.Parameters.AddWithValue("@subscribeTo", subscribeTo) |> ignore
+        command.ExecuteNonQuery() |> ignore
+        Ok { id = !lastId}  
 
     let GetUser () : ApiResult<UserData[]> =
         lock user <| fun () ->
@@ -321,6 +353,8 @@ module Site =
             JsonContent (Backend.GetLogin uname)
         | NewTweet tweetData ->
             JsonContent (Backend.NewTweet tweetData)
+        | SubscribeUser subscribeData ->
+            JsonContent (Backend.SubscribeUser subscribeData)
         | GetUser ->
             JsonContent (Backend.GetUser ())
         | GetPeople ->

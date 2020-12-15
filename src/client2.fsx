@@ -54,7 +54,7 @@ printfn "Registered as %s" uname
 
 
 
-printfn "\n Enter login info"
+printfn "\nEnter login info"
 let mutable loginUserName = Console.ReadLine()
 let url = "http://localhost:5000/api/login/" + loginUserName
 let a = FSharp.Data.JsonValue.Load url
@@ -88,5 +88,29 @@ let sendTweet twt =
     response1
 
 let NewTweet = sendTweet "test1"
+
+
+
+
+printfn "\n Enter User you want to subscribe to"
+let mutable subscribeTo = Console.ReadLine()
+let subscribe sub =
+
+    let json = sprintf """{  "uname" : "%s" , "subscribeTo": "%s" }"""  uname subscribeTo
+    let response = Http.Request(
+                                "http://localhost:5000/api/subscribe",
+                                httpMethod = "POST",
+                                headers = [ ContentType HttpContentTypes.Json ],
+                                body = TextRequest json
+        )
+    let r1 = response.Body
+    let response1 =
+        match r1 with
+        | Text a -> a
+        | Binary b -> System.Text.ASCIIEncoding.ASCII.GetString b
+  
+    response1
+
+let NewSubscription = subscribe "test1"
 
 System.Console.ReadLine() |> ignore
