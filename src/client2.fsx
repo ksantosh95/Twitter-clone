@@ -122,14 +122,27 @@ let getMentionedTweets() =
     let url = "http://localhost:5000/api/mention/" + uname
     let mentionedTweetJson = FSharp.Data.JsonValue.Load url
     let mentionedTweetArray = mentionedTweetJson.AsArray()
-    for tweet in mentionedTweetArray do
-        let tweetmsg = tweet.["text"].ToString()
-        let senderName  = tweet.["sender"].ToString()
-        printfn "%s tweeted : %s"  senderName tweetmsg
-        printfn"~~~~~~~~~~~~"
+    if mentionedTweetArray.Length = 0 then
+        printfn "No mentioned Tweets"
+    else
+        for tweet in mentionedTweetArray do
+            let tweetmsg = tweet.["text"].ToString()
+            let senderName  = tweet.["sender"].ToString()
+            printfn "%s tweeted : %s"  senderName tweetmsg
+            printfn"~~~~~~~~~~~~"
 
-
-
+let getSubscribedTweets() = 
+    let url = "http://localhost:5000/api/subscribed-tweets/" + uname
+    let SubscribedTweetJson = FSharp.Data.JsonValue.Load url
+    let SubscribedTweetArray = SubscribedTweetJson.AsArray()
+    if SubscribedTweetArray.Length = 0 then
+        printfn "No tweets from Subscribed Accounts"
+    else
+        for tweet in SubscribedTweetArray do
+            let tweetmsg = tweet.["text"].ToString()
+            let senderName  = tweet.["sender"].ToString()
+            printfn "%s tweeted : %s"  senderName tweetmsg
+            printfn"~~~~~~~~~~~~"
 
 
 
@@ -166,7 +179,7 @@ let rec menu () =
 
 let printMainMenu () =
     printfn "\n\n[ MAIN SCREEN ]"
-    printfn "1. Tweet\t 2. Subscribe\t 3. Get My Mentions\t 9. Exit"
+    printfn "1. Tweet\t 2. Subscribe\t 3. Get Subscribed Tweets\t 4. Get My Mentions\t 9. Exit"
 
 
     printf "Enter your choise: "
@@ -183,6 +196,9 @@ let rec mainMenu () =
         subscribe()
         mainMenu()
     | true, 3 ->
+        getSubscribedTweets()
+        mainMenu()
+    | true, 4 ->
         getMentionedTweets()
         mainMenu()
     | true, 9 ->

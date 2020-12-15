@@ -127,6 +127,9 @@ module Model =
         | [<EndPoint "GET /mention">]
             GetMentionTweets of uname: string
 
+        | [<EndPoint "GET /subscribed-tweets">]
+            GetSubscribedTweets of uname: string
+
         /// Accepts GET requests to /people
         | [<EndPoint "GET /user">]
             GetUser
@@ -324,13 +327,43 @@ module Backend =
         let reader = selectCommand.ExecuteReader()
         while reader.Read() do
                         tweetIdList <- Array.append tweetIdList  [|(reader.["tweetId"].ToString())|]
-        printfn "TweetIDLIST = %A" tweetIdList
+        
         for tweetId in tweetIdList do   
             let mutable (tweetMsg,senderName) = GetTweet(tweetId)
             let tweet = { text = tweetMsg
                           sender = senderName  }
             tweetList <- Array.append tweetList [|tweet|]
         tweetList |> Ok
+
+    //Get subscribed Tweets
+    let GetSubscribedTweets(uname: string) : ApiResult<TweetFetch[]> =
+        let userid = getUserId(uname)
+        let temp = userid.ToString()
+        let mutable subscribedToList = [||]
+        let mutable tweetIdList = [||]
+        let mutable tweetList = [||]
+        let selectSql = "select subscribeTo from SubscribeInfo where userId = " +  temp
+        let selectCommand = new SQLiteCommand(selectSql, connection)
+        let reader = selectCommand.ExecuteReader()
+        while reader.Read() do
+            subscribedToList <- Array.append subscribedToList  [|System.Convert.ToInt16(reader.["subscribeTo"])|]
+        if not (subscribedToList.Length = 0) then
+            for subscriberId in subscribedToList do
+                let temp1 = subscriberId.ToString()
+                printfn "temp = %A" temp1
+                let selectSql1 = "select tweetId from TweetsInfo where userId = " +  temp1
+                let selectCommand1 = new SQLiteCommand(selectSql1, connection)
+                let reader1 = selectCommand1.ExecuteReader()
+                while reader1.Read() do
+                    tweetIdList <- Array.append tweetIdList  [|(reader1.["tweetId"].ToString())|]
+            if not(tweetIdList.Length = 0) then
+                printfn "TweetIDLIST = %A" tweetIdList 
+                for tweetId in tweetIdList do   
+                    let mutable (tweetMsg,senderName) = GetTweet(tweetId)
+                    let tweet = { text = tweetMsg
+                                  sender = senderName  }
+                    tweetList <- Array.append tweetList [|tweet|]
+        tweetList |> Ok 
 
     let GetUser () : ApiResult<UserData[]> =
         lock user <| fun () ->
@@ -406,7 +439,8 @@ module Site =
             JsonContent (Backend.SubscribeUser subscribeData)
         | GetMentionTweets uname ->
             JsonContent (Backend.GetMentionTweets uname)
-        
+        | GetSubscribedTweets uname ->
+            JsonContent (Backend.GetSubscribedTweets uname)
         | GetUser ->
             JsonContent (Backend.GetUser ())
         | GetPeople ->
