@@ -11,7 +11,9 @@ open WebSharper.UI.Templating
 open System.Data.SQLite 
 
 //Map with User Name as key, Id as value
-let mutable userIdNameMap = Map.empty
+let mutable userNameIpMap = Map.empty
+let mutable userIpNameMap = Map.empty
+let mutable activeUsersSet = Set.empty 
 
 //Initialize Database
 let db_init() =
@@ -67,7 +69,13 @@ let db_init() =
     let structureCommand = new SQLiteCommand(structureSql, connection)
     structureCommand.ExecuteNonQuery() |>ignore
 
-
+    //Table for NewsFeed
+    let structureSql =
+            "create table if not exists NewsFeed (" +
+            "userId int," + 
+            "tweetId varchar(50))"
+    let structureCommand = new SQLiteCommand(structureSql, connection)
+    structureCommand.ExecuteNonQuery() |>ignore
 
 
 /// The types used by this application.
@@ -128,8 +136,11 @@ module Model =
         | [<EndPoint "GET /hashtag-tweets">]
             GetHashtagTweets of hashtag: string
         
+        | [<EndPoint "GET /live-tweets">]
+            GetLiveTweets of uname: string
 
-
+        | [<EndPoint "POST /logout"; Json "userData">]
+            LogoutUser of userData: UserData
  
 
     /// The type of all endpoints for the application.
@@ -166,7 +177,7 @@ module Backend =
         Error (Http.Status.NotFound, { error = "Person not found." })
 
     let getUserId(uname:string) = 
-        let userid = userIdNameMap.[uname]
+        let userid = userNameIpMap.[uname]
         userid
 
     //Function to parse tweets and extract hashtags and mentions
@@ -193,7 +204,8 @@ module Backend =
             command.Parameters.AddWithValue("@password", data.pwd) |> ignore
             command.ExecuteNonQuery() |> ignore
             let temp = data.uname.ToString()
-            userIdNameMap <- Map.add temp !lastId userIdNameMap
+            userNameIpMap <- Map.add temp !lastId userNameIpMap
+            userIpNameMap <- Map.add !lastId temp userIpNameMap
             Ok { id = !lastId }
             
     //USER LOGIN   
@@ -206,11 +218,25 @@ module Backend =
         while reader.Read() do
             isExistsLogin <- true
         if isExistsLogin then   
+           let userid= getUserId(uname)
+           activeUsersSet <- activeUsersSet.Add(userid)
            Ok { text = "True"  
-                userid = userIdNameMap.[uname] }
+                userid = userNameIpMap.[uname] }
         else   
            Ok { text = "False" 
                 userid = 0 }
+
+    //LOGOUT USER
+    let LogoutUser (data: UserData) : ApiResult<Id> = 
+            let userid = getUserId(data.uname)
+            let useridString = userid.ToString()
+            activeUsersSet <- activeUsersSet.Remove(userid)
+            printfn "--------%A" activeUsersSet
+            let deleteSql =  "delete from  NewsFeed where userId = " + useridString 
+            use command = new SQLiteCommand(deleteSql, connection)
+            command.ExecuteNonQuery() |> ignore
+            Ok { id = !lastId }
+
 
     let WriteHashtag (tweetId: string, hashtag: string) =
         let insertSql = 
@@ -233,6 +259,8 @@ module Backend =
 
     //NEW TWEET FROM THE USER
     let NewTweet (data: TweetData) : ApiResult<Id> = 
+        let userIdString = data.userid.ToString()
+        printfn "%A" userIdString
         let mutable tweetId = Guid.NewGuid().ToString()
         let insertSql = 
                     "insert into TweetsInfo( tweetId, msg, userId) " + 
@@ -247,6 +275,38 @@ module Backend =
             WriteHashtag(tweetId,hashtag)
         for userMention in mentionedArray do
             WriteMention(tweetId,userMention,data.userid)
+
+        ///INSERT TWEET MENTIONS INTO FEEDS
+            let userMentionId = getUserId(userMention)
+            if activeUsersSet.Contains userMentionId then
+                let insertSql = 
+                        "insert into NewsFeed( userId, tweetId) " + 
+                        "values (@userId, @tweetId )"
+                use command = new SQLiteCommand(insertSql, connection)
+                command.Parameters.AddWithValue("@userId", userMentionId) |> ignore
+                command.Parameters.AddWithValue("@tweetId", tweetId) |> ignore
+                command.ExecuteNonQuery() |> ignore
+ 
+        ///INSERT TWEETS FOR SUBSCRIBERS
+        
+        let mutable subscriberList = [||]
+        let selectSql =  "select userId from SubscribeInfo where subscribeTo =  " + userIdString
+        let selectCommand = new SQLiteCommand(selectSql, connection)
+        let reader = selectCommand.ExecuteReader()
+        while reader.Read() do
+            subscriberList <- Array.append subscriberList  [|System.Convert.ToInt16(reader.["userId"])|]
+
+        for subscriber in subscriberList do
+            let tempuser = (int) subscriber
+            if activeUsersSet.Contains tempuser then
+                let insertSql = 
+                        "insert into NewsFeed( userId, tweetId) " + 
+                        "values (@userId, @tweetId )"
+                use command = new SQLiteCommand(insertSql, connection)
+                command.Parameters.AddWithValue("@userId", subscriber) |> ignore
+                command.Parameters.AddWithValue("@tweetId", tweetId) |> ignore
+                command.ExecuteNonQuery() |> ignore
+
         Ok { id = !lastId}
     
     //SUBSCRIBE TO USER
@@ -280,7 +340,7 @@ module Backend =
                 senderName <- reader1.["uname"].ToString()
         (tweetMsg,senderName)
 
-
+   
     //Get my mentioned Tweets
     let GetMentionTweets (uname: string) : ApiResult<TweetFetch[]> =
         let temp = "\""+uname+"\"" 
@@ -313,7 +373,6 @@ module Backend =
         if not (subscribedToList.Length = 0) then
             for subscriberId in subscribedToList do
                 let temp1 = subscriberId.ToString()
-                printfn "temp = %A" temp1
                 let selectSql1 = "select tweetId from TweetsInfo where userId = " +  temp1
                 let selectCommand1 = new SQLiteCommand(selectSql1, connection)
                 let reader1 = selectCommand1.ExecuteReader()
@@ -339,7 +398,6 @@ module Backend =
         while reader.Read() do
             tweetIdList <- Array.append tweetIdList  [|(reader.["tweetId"].ToString())|]
         if not(tweetIdList.Length = 0) then
-                printfn "TweetIDLIST = %A" tweetIdList 
                 for tweetId in tweetIdList do   
                     let mutable (tweetMsg,senderName) = GetTweet(tweetId)
                     let tweet = { text = tweetMsg
@@ -347,6 +405,30 @@ module Backend =
                     tweetList <- Array.append tweetList [|tweet|]
         tweetList |> Ok 
 
+    let GetLiveTweets(uname:string):ApiResult<TweetFetch[]> =
+        let userid = getUserId(uname).ToString()
+        let useridInt = getUserId(uname)
+        let mutable tweetIdList = [||]
+        let mutable tweetList = [||]
+        if activeUsersSet.Contains(useridInt) then
+            let selectSql = "select tweetId from NewsFeed where userId =  " + userid
+            let selectCommand = new SQLiteCommand(selectSql, connection)
+            let reader = selectCommand.ExecuteReader()
+            while reader.Read() do
+                tweetIdList <- Array.append tweetIdList  [|(reader.["tweetId"].ToString())|]
+            if not(tweetIdList.Length = 0) then
+                    for tweetId in tweetIdList do   
+                        let mutable (tweetMsg,senderName) = GetTweet(tweetId)
+                        let tweet = { text = tweetMsg
+                                      sender = senderName  }
+                        tweetList <- Array.append tweetList [|tweet|]
+
+            for tweetId in tweetIdList do
+                let tweetIdString = "\""+tweetId+"\"" 
+                let deleteSql =  "delete from  NewsFeed where userId = " + userid + " and tweetId = " +  tweetIdString
+                use command = new SQLiteCommand(deleteSql, connection)
+                command.ExecuteNonQuery() |> ignore
+        tweetList |> Ok 
 
 
     
@@ -385,7 +467,10 @@ module Site =
             JsonContent (Backend.GetSubscribedTweets uname)
         | GetHashtagTweets hashtag ->
             JsonContent (Backend.GetHashtagTweets hashtag)
-
+        | GetLiveTweets uname ->
+            JsonContent (Backend.GetLiveTweets uname)
+        | LogoutUser userData ->
+            JsonContent (Backend.LogoutUser userData)
 
 
 
