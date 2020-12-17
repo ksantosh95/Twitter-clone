@@ -1,6 +1,8 @@
 module TwitterApi.Engine
 
-
+open Akka
+open Akka.Actor
+open Akka.FSharp
 open System
 open System.Collections.Generic
 open WebSharper
@@ -9,12 +11,16 @@ open WebSharper.UI
 open WebSharper.UI.Html
 open WebSharper.UI.Templating
 open System.Data.SQLite 
+open Websocket
+open Websocket.Client
+open System.Net.WebSockets;
 
 //Map with User Name as key, Id as value
 let mutable userNameIpMap = Map.empty
 let mutable userIpNameMap = Map.empty
 let mutable activeUsersSet = Set.empty 
 
+let mutable clientId = ""
 //Initialize Database
 let db_init() =
 
@@ -161,10 +167,103 @@ module Model =
     /// Default result value
     type Id = { id : int }
 
+
+    type [<JavaScript; NamedUnionCases>]
+        C2SMessage =
+        | Request1 of str: string[]
+        | Request2 of int: int[]
+
+    and [<JavaScript; NamedUnionCases "type">]
+        S2CMessage =
+        | [<Name "int">] Response2 of value: int
+        | [<Name "string">] Response1 of value: string
+
+    type StatefulAgent<'S2C, 'C2S, 'State> = Message of string * string * int
+
+
+
+module Server = 
+
+    let databaseFilename = "sample.sqlite"
+    let connectionString = sprintf "Data Source=%s;Version=3;" databaseFilename
+    let connection = new SQLiteConnection(connectionString)
+    connection.Open()
+
+    let getUserId(uname:string) = 
+        let userid = userNameIpMap.[uname]
+        userid
+    
+    let GetTweet (tweetId:string) =
+        let temp = "\""+tweetId+"\"" 
+        let mutable tweetMsg = ""
+        let mutable senderName = ""
+        let selectSql  = "select msg, userId from TweetsInfo where tweetID = " + temp
+        let selectCommand = new SQLiteCommand(selectSql, connection)
+        let reader = selectCommand.ExecuteReader()
+        while reader.Read() do
+            tweetMsg <- reader.["msg"].ToString()
+            let userid = reader.["userId"].ToString()
+            let selectSql1  = "select uname from RegistrationInfo where userId = " + userid
+            let selectCommand1 = new SQLiteCommand(selectSql1, connection)
+            let reader1 = selectCommand1.ExecuteReader()
+            while reader1.Read() do
+                senderName <- reader1.["uname"].ToString()
+        (tweetMsg,senderName)
+
+    
+    let Start() =
+
+        let serverActor() (mailbox: Actor<_>) =
+
+                    let ws = sprintf "/api/websocket/%s" clientId
+                    let wsUri = System.Uri(ws)
+                    let client = new WebsocketClient(wsUri)
+                    let rec loop () = actor {
+                        
+                        let userid = getUserId(clientId).ToString()
+                        let useridInt = getUserId(clientId)
+                        let mutable tweetIdList = [||]
+                        let mutable tweetList = [||]
+                        if activeUsersSet.Contains(useridInt) then
+                            let selectSql = "select tweetId from NewsFeed where userId =  " + userid
+                            let selectCommand = new SQLiteCommand(selectSql, connection)
+                            let reader = selectCommand.ExecuteReader()
+                            while reader.Read() do
+                                tweetIdList <- Array.append tweetIdList  [|(reader.["tweetId"].ToString())|]
+                            if not(tweetIdList.Length = 0) then
+                                    for tweetId in tweetIdList do   
+                                        let mutable (tweetMsg,senderName) = GetTweet(tweetId)
+                                        let tweet = tweetMsg
+                                        tweetList <- Array.append tweetList [|tweet|]
+
+                            for tweetId in tweetIdList do
+                                let tweetIdString = "\""+tweetId+"\"" 
+                                let deleteSql =  "delete from  NewsFeed where userId = " + userid + " and tweetId = " +  tweetIdString
+                                use command = new SQLiteCommand(deleteSql, connection)
+                                command.ExecuteNonQuery() |> ignore
+                        
+                        for tweetMsg in tweetList do
+                            client.Send tweetMsg
+
+                        return! loop ()
+                    }
+                    loop ()
+
+        let serversystem = ActorSystem.Create("server")
+        let serverActorConfig = serverActor()
+        let serverName = "server"
+        let serverActorRef = spawn serversystem serverName serverActorConfig
+        printf ""
+
+
+
 open Model
 
 /// This module implements the back-end of the application.
 module Backend =
+
+   
+
 
     let databaseFilename = "sample.sqlite"
     let connectionString = sprintf "Data Source=%s;Version=3;" databaseFilename

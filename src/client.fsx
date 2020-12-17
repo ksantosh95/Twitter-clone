@@ -1,6 +1,7 @@
 #r "nuget: Akka" 
 #r "nuget: Akka.FSharp" 
 #r "nuget: FSharp.Data, Version=3.0.1"
+#r "nuget: Websocket.Client"
 
 open System
 open Akka.Actor
@@ -12,6 +13,10 @@ open System.Threading
 open FSharp.Data
 open FSharp.Data.HttpRequestHeaders
 open FSharp.Data.JsonExtensions
+open Websocket.Client
+open System.Net.WebSockets
+open System.Threading
+open System.Threading.Tasks
 
 let mutable tweetMap = Map.empty
 let mutable feedMap = Map.empty
@@ -351,16 +356,40 @@ let rec mainMenu () =
         mainMenu()
 
 
+
+let rec socketRecieve (ws:ClientWebSocket, wcts:CancellationToken) =
+    async {
+        let responsetweet = new ArraySegment<Byte>( Array.create (1500) Byte.MinValue)
+        let responsesender = new ArraySegment<Byte>( Array.create (1500) Byte.MinValue)
+        let task =  ws.ReceiveAsync(responsetweet,wcts)
+        count <- count + 1
+        while not (task.IsCompleted) do
+            ()
+        let tweetmsg = System.Text.Encoding.ASCII.GetString (responsetweet.Array)
+        let senderName = System.Text.Encoding.ASCII.GetString (responsesender.Array)
+        printfn"\t\t~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+        printfn "\t\t[%d] %s tweeted : %s"  count senderName tweetmsg
+        printfn"\t\t~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+        tweetMap <- Map.add count tweetmsg tweetMap
+        return! socketRecieve(ws, wcts)
+    }
+  
+
+
+
+
 let clientActor()(mailbox : Actor<_>) = 
-    let mutable refreshTime = 5000
-    let refreshTimer =  new System.Timers.Timer((float)refreshTime)
-
+    let ws = new ClientWebSocket()
+    let url = sprintf "ws://localhost/8080/api/websocket/%s" uname
+    let wsUri = Uri(url)
+    let wcts = CancellationToken()
+    let connectTask = ws.ConnectAsync(wsUri,wcts)
     let rec loop() =  actor {
+      
+        
         Thread.Sleep(5000) 
-
         let validTweet = getFeed()
-        // if validTweet then
-        //     mainMenu()
+
         return! loop()
         }
     loop()
