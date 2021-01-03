@@ -13,8 +13,6 @@ open System.Threading
 open FSharp.Data
 open FSharp.Data.HttpRequestHeaders
 open FSharp.Data.JsonExtensions
-open Websocket.Client
-open System.Net.WebSockets
 open System.Threading
 open System.Threading.Tasks
 
@@ -357,23 +355,6 @@ let rec mainMenu () =
 
 
 
-let rec socketRecieve (ws:ClientWebSocket, wcts:CancellationToken) =
-    async {
-        let responsetweet = new ArraySegment<Byte>( Array.create (1500) Byte.MinValue)
-        let responsesender = new ArraySegment<Byte>( Array.create (1500) Byte.MinValue)
-        let task =  ws.ReceiveAsync(responsetweet,wcts)
-        count <- count + 1
-        while not (task.IsCompleted) do
-            ()
-        let tweetmsg = System.Text.Encoding.ASCII.GetString (responsetweet.Array)
-        let senderName = System.Text.Encoding.ASCII.GetString (responsesender.Array)
-        printfn"\t\t~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
-        printfn "\t\t[%d] %s tweeted : %s"  count senderName tweetmsg
-        printfn"\t\t~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
-        tweetMap <- Map.add count tweetmsg tweetMap
-        return! socketRecieve(ws, wcts)
-    }
-  
 
 
 

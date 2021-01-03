@@ -11,8 +11,7 @@ open WebSharper.UI
 open WebSharper.UI.Html
 open WebSharper.UI.Templating
 open System.Data.SQLite 
-open Websocket
-open Websocket.Client
+
 open System.Net.WebSockets;
 
 //Map with User Name as key, Id as value
@@ -211,50 +210,7 @@ module Server =
         (tweetMsg,senderName)
 
     
-    let Start() =
-
-        let serverActor() (mailbox: Actor<_>) =
-
-                    let ws = sprintf "/api/websocket/%s" clientId
-                    let wsUri = System.Uri(ws)
-                    let client = new WebsocketClient(wsUri)
-                    let rec loop () = actor {
-                        
-                        let userid = getUserId(clientId).ToString()
-                        let useridInt = getUserId(clientId)
-                        let mutable tweetIdList = [||]
-                        let mutable tweetList = [||]
-                        if activeUsersSet.Contains(useridInt) then
-                            let selectSql = "select tweetId from NewsFeed where userId =  " + userid
-                            let selectCommand = new SQLiteCommand(selectSql, connection)
-                            let reader = selectCommand.ExecuteReader()
-                            while reader.Read() do
-                                tweetIdList <- Array.append tweetIdList  [|(reader.["tweetId"].ToString())|]
-                            if not(tweetIdList.Length = 0) then
-                                    for tweetId in tweetIdList do   
-                                        let mutable (tweetMsg,senderName) = GetTweet(tweetId)
-                                        let tweet = tweetMsg
-                                        tweetList <- Array.append tweetList [|tweet|]
-
-                            for tweetId in tweetIdList do
-                                let tweetIdString = "\""+tweetId+"\"" 
-                                let deleteSql =  "delete from  NewsFeed where userId = " + userid + " and tweetId = " +  tweetIdString
-                                use command = new SQLiteCommand(deleteSql, connection)
-                                command.ExecuteNonQuery() |> ignore
-                        
-                        for tweetMsg in tweetList do
-                            client.Send tweetMsg
-
-                        return! loop ()
-                    }
-                    loop ()
-
-        let serversystem = ActorSystem.Create("server")
-        let serverActorConfig = serverActor()
-        let serverName = "server"
-        let serverActorRef = spawn serversystem serverName serverActorConfig
-        printf ""
-
+ 
 
 
 open Model
