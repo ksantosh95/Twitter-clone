@@ -1,5 +1,4 @@
-<br />
-<p align="center">
+<p align="center" >
 	TWITTER CLONE with F#
   <p align="center">
     
@@ -11,8 +10,8 @@
 
 <p align="center">
     <img src="img/fsharp-logo.png" width="50" height="50"> 
-    <img src="img/rest-logo.png" width="50" height="50">
-    <img src="img/sqlite-logo.png" width="50" height="50">
+    <img src="img/rest-logo.png" width="100" height="50">
+    <img src="img/sqlite-logo.png" width="100" height="50">
   
 </p>
 
@@ -28,15 +27,13 @@
 
 **DEMO**
 ---
- <p align="center">
- <img src="static/img/app/app.gif" width="520" height="300">
- </p>
+ <p align="center" >
+					1.	Registration and Login (Alice on Left)		<br>
+					<img src="images/project/twt-3.gif" width="70%">
+					<br><br>
+					2.	Tweet Delivered to a subscribed user (Bob on right subscribes to Alice. Tweets sent by Alice are delivered to Bob live)<br>				
+					<img src="images/project/twt-4.gif" width="70%">
+					</p>
  
 
- 
-**Views**
----
 
-
-**Steps to Run**
----
