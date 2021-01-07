@@ -32,7 +32,7 @@
 					<img src="img/twt-3.gif" width="70%">
 					<br><br>
 					2.	Tweet Delivered to a subscribed user (Bob on right subscribes to Alice. Tweets sent by Alice are delivered to Bob live)<br>				
-					<img src="imgtwt-4.gif" width="70%">
+					<img src="img/twt-4.gif" width="70%">
 					</p>
  
 
